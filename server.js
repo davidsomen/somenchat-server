@@ -1,5 +1,9 @@
-const repl = require('repl');
 const WebSocket = require('ws');
+const OpenAI = require('openai');
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
 
 const port = process.env.PORT || 8080;
 
@@ -32,6 +36,13 @@ wss.on('connection', function connection(ws) {
   ws.on('message', function incoming(message) {
     console.log('Message received: %s', message);
     broadcastMessage(message, ws);
+
+    try {
+      const data = JSON.parse(message);
+      generateText(data.body);
+    } catch (error) {
+      console.error('Error parsing JSON:', error);
+    }
   });
 
   ws.on('close', function() {
@@ -49,12 +60,24 @@ wss.on('connection', function connection(ws) {
 
 console.log('WebSocket server started on ws://localhost:%s', port);
 
-const replServer = repl.start({
-  prompt: 'WebSocket Server > ',
-  input: process.stdin,
-  output: process.stdout
-});
 
-replServer.context.wss = wss;
-replServer.context.clients = clients;
-replServer.context.broadcastMessage = broadcastMessage;
+
+async function generateText(promptText) {
+  try {
+    const response = await openai.chat.completions.create({
+      messages: [{ role: 'user', content: promptText }],
+      model: 'gpt-3.5-turbo',
+    });
+
+    const text = response.choices[0].message.content
+    const message = {
+      type: 'TextMessage',
+      body: text,
+      from: 'AI'
+    };
+    broadcastMessage(JSON.stringify(message))
+    console.log(text);
+  } catch (error) {
+    console.error(error);
+  }
+}

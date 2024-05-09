@@ -1,83 +1,102 @@
-const WebSocket = require('ws');
-const OpenAI = require('openai');
+import WebSocket, { WebSocketServer } from 'ws';
+import { generateText } from './openai.js';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
 
 const port = process.env.PORT || 8080;
+const wss = new WebSocketServer({ port });
+const clients = new Map();
 
-const wss = new WebSocket.Server({ port: port });
-const clients = new Set();
 
 const broadcastMessage = (message, sender = null) => {
-  for (let client of clients) {
+  for (const [client, userInfo] of clients) {
     if (client !== sender && client.readyState === WebSocket.OPEN) {
-      console.log('Message sent');
+      console.log(`Message sent: ${message}`);
       client.send(message);
     }
   }
 };
 
-const broadcastPlayerCount = () => {
-  const message = {
-    type: 'PlayerCountUpdate',
-    body: clients.size.toString()
+
+const broadcastAIResponse = async (text) => {
+  let responseText = await generateText(text);
+
+  const messageResponse = {
+    type: 'TextMessage',
+    message: responseText,
+    from: "AI"
   };
+  broadcastMessage(JSON.stringify(messageResponse));
+};
+
+
+const broadcastPeopleUpdate = () => {
+  const array = Array.from(clients).map(([ws, userInfo]) => ({
+    username: userInfo.username,
+    id: userInfo.id
+  }));
+
+  const message = {
+    type: 'PeopleUpdate',
+    people: array
+  };
+
   broadcastMessage(JSON.stringify(message));
-}
+};
 
-wss.on('connection', function connection(ws) {
+
+wss.on('connection', ws => {
   console.log('Client connected');
-  clients.add(ws);
+  clients.set(ws, { username: null, id: null });
 
-  broadcastPlayerCount();
+  broadcastPeopleUpdate();
 
-  ws.on('message', function incoming(message) {
-    console.log('Message received: %s', message);
-    broadcastMessage(message, ws);
+
+  ws.on('message', async message => {
+    console.log('Message received:', message.toString('utf8'));
 
     try {
-      const data = JSON.parse(message);
-      generateText(data.body);
+      const json = JSON.parse(message);
+
+      switch (json.type) {
+        case "TextMessage":
+          broadcastMessage(message, ws);
+          
+          if (json.message.startsWith("AI ")) {
+            const text = json.message.slice(3);
+            broadcastAIResponse(text);
+          }
+          break;
+
+        case "UpdatePerson":
+          const client = clients.get(ws)
+          const person = json.person;
+          client.username = person.username;
+          client.id = person.id;
+          broadcastPeopleUpdate();
+          break;
+
+        default:
+          broadcastMessage(message, ws);
+          break;
+      }
     } catch (error) {
       console.error('Error parsing JSON:', error);
     }
   });
 
-  ws.on('close', function() {
+
+  ws.on('close', () => {
     console.log('Client closed');
     clients.delete(ws);
-
-    broadcastPlayerCount();
+    broadcastPeopleUpdate();
   });
-  
-  ws.on('error', function error(err) {
+
+
+  ws.on('error', err => {
     console.log('Client disconnected');
-    console.error('error: ', err);
+    console.error('Error:', err);
   });
 });
 
-console.log('WebSocket server started on ws://localhost:%s', port);
 
-
-
-async function generateText(promptText) {
-  try {
-    const response = await openai.chat.completions.create({
-      messages: [{ role: 'user', content: promptText }],
-      model: 'gpt-3.5-turbo',
-    });
-
-    const text = response.choices[0].message.content
-    const message = {
-      type: 'TextMessage',
-      body: text,
-      from: 'AI'
-    };
-    broadcastMessage(JSON.stringify(message))
-    console.log(text);
-  } catch (error) {
-    console.error(error);
-  }
-}
+console.log(`WebSocket server started on ws://localhost:${port}`);

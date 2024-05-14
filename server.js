@@ -35,7 +35,8 @@ const broadcastAIResponse = async (text) => {
   const messageResponse = {
     type: 'TextMessage',
     message: responseText,
-    from: "AI"
+    from: "AI",
+    id: "0000"
   };
   broadcastMessage(JSON.stringify(messageResponse));
 };

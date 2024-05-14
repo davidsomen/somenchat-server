@@ -1,10 +1,22 @@
+import express from 'express';
+import http from 'http';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import WebSocket, { WebSocketServer } from 'ws';
 import { generateText } from './openai.js';
 
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
 const port = process.env.PORT || 8080;
-const wss = new WebSocketServer({ port });
 const clients = new Map();
+
+app.use(express.static(path.join(__dirname, 'public')));
+
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server });
 
 
 const broadcastMessage = (message, sender = null) => {
@@ -99,4 +111,7 @@ wss.on('connection', ws => {
 });
 
 
-console.log(`WebSocket server started on ws://localhost:${port}`);
+server.listen(port, () => {
+  console.log(`Server started on http://localhost:${port}`);
+  console.log(`WebSocket server started on ws://localhost:${port}`);
+});

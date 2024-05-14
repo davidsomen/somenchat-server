@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        svg { width: 400px; height: 400px; background: #f0f0f0; border: 1px solid #ccc; }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Test</h1>
+
+    <input type="text" id="nameInput" placeholder="Name">
+    <button onclick="setName()">Set</button>
+    
+    <br><br>
+    
+    <input type="text" id="messageInput" placeholder="Message">
+    <button onclick="sendMessage()">Send</button>
+    
+    <br><br>
+    
+    <svg id="gameArea" viewBox="0 0 100 100">
+        <circle id="local-player" cx="50" cy="20" r="3" fill="green">
+        <circle id="remote-player" cx="50" cy="50" r="3" fill="red">
+    </svg>
+    
+    <h2>Message Log</h2>
+    <div id="messages"></div>
+    
+    <br><br>
+    
+    <button onclick="requestNotificationPermission()">Enable Notifications</button>
+
+    <script>
+        const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const socket = new WebSocket(`${protocol}//${location.host}`);
+
+        socket.addEventListener('open', function (event) {
+            console.log('Connected to WebSocket.');
+        });
+
+		socket.addEventListener('message', function (event) {
+            processMessage(event.data, function(json) {
+                displayMessage(json);
+                
+                if (json.type == "TextMessage") {
+//                 	alert(json.message)
+                	showNotification(json.message);
+                }
+            });
+        });
+
+        socket.addEventListener('close', function (event) {
+            console.log('Disconnected from WebSocket.');
+        });
+
+        socket.addEventListener('error', function (event) {
+            console.error('WebSocket error:', event);
+        });
+        
+        
+        
+        function processMessage(data, callback) {
+            if (data instanceof Blob) {
+                const reader = new FileReader();
+                reader.onload = function() {
+                    callback(JSON.parse(reader.result));
+                };
+                reader.readAsText(data);
+            } else {
+                callback(JSON.parse(data));
+            }
+        }
+
+        function displayMessage(json) {
+            const messages = document.getElementById('messages');
+            const message = document.createElement('p');
+            message.textContent = JSON.stringify(json);
+            messages.appendChild(message);
+        }
+        
+        
+        
+
+
+        function setName() {
+            const name = document.getElementById('nameInput').value;
+
+            localStorage.setItem('username', name);
+
+            const message = {
+                id: "0000",
+                type: "UpdatePerson",
+                person: { id: "0000", username: name }
+            };
+            socket.send(JSON.stringify(message));
+        }
+
+        function loadName() {
+            const name = localStorage.getItem('username');
+            if (name) {
+                document.getElementById('nameInput').value = name;
+            }
+        }
+
+        loadName()
+
+
+
+        
+        function sendMessage() {
+            const messageText = document.getElementById('messageInput').value;
+            const name = document.getElementById('nameInput').value;
+            const message = {
+                id: "0000",
+                message: messageText,
+                type: "TextMessage",
+                from: name
+            };
+            socket.send(JSON.stringify(message));
+        }
+        
+        
+        
+        
+		function startHeartbeat() {
+		    setInterval(() => {
+		        if (socket.readyState === WebSocket.OPEN) {
+		            socket.send(JSON.stringify({ type: 'heartbeat' }));
+		        }
+		    }, 30000);
+		}
+        
+        startHeartbeat();
+        
+        
+    
+        
+		function requestNotificationPermission() {
+		    if (!("Notification" in window)) {
+		        alert("This browser does not support desktop notification");
+		    }
+		    else if (Notification.permission === "granted") {
+		        showNotification("Already subscribed!");
+		    }
+		    else if (Notification.permission !== "denied" || Notification.permission === "default") {
+		        Notification.requestPermission().then(function (permission) {
+		            if (permission === "granted") {
+		                showNotification("Subscribed!");
+		            }
+		        });
+		    }
+		}
+		
+		function showNotification(message) {
+		    var notification = new Notification(message);
+		}
+        
+        
+        
+        
+        const player = {
+            x: 500,
+            y: 500,
+            size: 30
+        };
+
+//         const svgNS = "http://www.w3.org/2000/svg";
+//         const ball = document.createElementNS(svgNS, "circle");
+//         ball.setAttribute("cx", player.x);
+//         ball.setAttribute("cy", player.y);
+//         ball.setAttribute("r", player.size);
+//         ball.setAttribute("fill", "green");
+//         document.getElementById("gameArea").appendChild(ball);
+
+		const localPlayer = document.getElementById('local-player');
+		const remotePlayer = document.getElementById('remote-player');
+
+        document.addEventListener("keydown", function(event) {
+            const step = 30;
+            if (event.key === "ArrowLeft") player.x -= step;
+            else if (event.key === "ArrowRight") player.x += step;
+            else if (event.key === "ArrowUp") player.y -= step;
+            else if (event.key === "ArrowDown") player.y += step;
+
+            localPlayer.setAttribute("cx", player.x / 10);
+            localPlayer.setAttribute("cy", player.y / 10);
+            localPlayer.setAttribute("r", player.size / 10);
+
+            const message = {
+                type: "GameUpdate",
+                player: player
+            };
+            socket.send(JSON.stringify(message));
+        });
+    </script>
+</body>
+</html>

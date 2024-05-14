@@ -8,7 +8,7 @@ const generateText = async (promptText) => {
   try {
     const response = await openai.chat.completions.create({
       messages: [{ role: 'user', content: promptText }],
-      model: 'gpt-3.5-turbo',
+      model: 'gpt-4o',
     });
 
     const text = response.choices[0].message.content;

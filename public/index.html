@@ -2,200 +2,98 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebSocket Test</title>
+    <title>DJ Cube</title>
     <style>
-        body { font-family: Arial, sans-serif; }
-        svg { width: 400px; height: 400px; background: #f0f0f0; border: 1px solid #ccc; }
+        body { margin: 0; }
+        canvas { display: block; }
     </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
-    <h1>WebSocket Test</h1>
+<script>
+    let scene, camera, renderer, cube;
+    let speed = 0.05;
 
-    <input type="text" id="nameInput" placeholder="Name">
-    <button onclick="setName()">Set</button>
-    
-    <br><br>
-    
-    <input type="text" id="messageInput" placeholder="Message">
-    <button onclick="sendMessage()">Send</button>
-    
-    <br><br>
-    
-    <svg id="gameArea" viewBox="0 0 100 100">
-        <circle id="local-player" cx="50" cy="20" r="3" fill="green">
-        <circle id="remote-player" cx="50" cy="50" r="3" fill="red">
-    </svg>
-    
-    <h2>Message Log</h2>
-    <div id="messages"></div>
-    
-    <br><br>
-    
-    <button onclick="requestNotificationPermission()">Enable Notifications</button>
+    function init() {
+        scene = new THREE.Scene();
 
-    <script>
-        const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const socket = new WebSocket(`${protocol}//${location.host}`);
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 5;
 
-        socket.addEventListener('open', function (event) {
-            console.log('Connected to WebSocket.');
-        });
+        renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
 
-		socket.addEventListener('message', function (event) {
-            processMessage(event.data, function(json) {
-                displayMessage(json);
-                
-                if (json.type == "TextMessage") {
-//                 	alert(json.message)
-                	showNotification(json.message);
-                }
-            });
-        });
+        const canvas = document.createElement('canvas');
+        const size = 256;
+        canvas.width = size;
+        canvas.height = size;
+        const context = canvas.getContext('2d');
+        context.fillStyle = 'red';
+        context.fillRect(0, 0, size, size);
+        context.fillStyle = 'black';
+        context.font = '150px "Georgia"';
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        context.fillText('DJ', size / 2, size / 2);
 
-        socket.addEventListener('close', function (event) {
-            console.log('Disconnected from WebSocket.');
-        });
+        const texture = new THREE.CanvasTexture(canvas);
 
-        socket.addEventListener('error', function (event) {
-            console.error('WebSocket error:', event);
-        });
+        const materials = [
+            new THREE.MeshStandardMaterial({ map: texture }),
+            new THREE.MeshStandardMaterial({ map: texture }),
+            new THREE.MeshStandardMaterial({ map: texture }),
+            new THREE.MeshStandardMaterial({ map: texture }),
+            new THREE.MeshStandardMaterial({ map: texture }),
+            new THREE.MeshStandardMaterial({ map: texture })
+        ];
+
+        const geometry = new THREE.BoxGeometry();
+        cube = new THREE.Mesh(geometry, materials);
+
+        scene.add(cube);
         
+        const ambientLight = new THREE.AmbientLight(0x333333);
+        scene.add(ambientLight);
         
+        const pointLight = new THREE.PointLight(0xffffff, 1, 100);
+        pointLight.position.set(5, 5, 5);
+        scene.add(pointLight);
+
+        document.addEventListener('keydown', onDocumentKeyDown, false);
+
+        animate();
+    }
+
+    function onDocumentKeyDown(event) {
+        let keyCode = event.which;
         
-        function processMessage(data, callback) {
-            if (data instanceof Blob) {
-                const reader = new FileReader();
-                reader.onload = function() {
-                    callback(JSON.parse(reader.result));
-                };
-                reader.readAsText(data);
-            } else {
-                callback(JSON.parse(data));
-            }
+        if (keyCode === 37) {
+            // Left arrow key
+            cube.position.x -= speed;
+        } else if (keyCode === 39) {
+            // Right arrow key
+            cube.position.x += speed;
+        } else if (keyCode === 38) {
+            // Up arrow key
+            cube.position.y += speed;
+        } else if (keyCode === 40) {
+            // Down arrow key
+            cube.position.y -= speed;
         }
+    }
 
-        function displayMessage(json) {
-            const messages = document.getElementById('messages');
-            const message = document.createElement('p');
-            message.textContent = JSON.stringify(json);
-            messages.appendChild(message);
-        }
+    function animate() {
+        requestAnimationFrame(animate);
         
-        
-        
+        cube.rotation.x += (Math.random() - 0.5) * 0.1;
+        cube.rotation.y += (Math.random() - 0.5) * 0.1;
+        cube.rotation.z += (Math.random() - 0.5) * 0.1;
 
+        renderer.render(scene, camera);
+    }
 
-        function setName() {
-            const name = document.getElementById('nameInput').value;
-
-            localStorage.setItem('username', name);
-
-            const message = {
-                id: "0000",
-                type: "UpdatePerson",
-                person: { id: "0000", username: name }
-            };
-            socket.send(JSON.stringify(message));
-        }
-
-        function loadName() {
-            const name = localStorage.getItem('username');
-            if (name) {
-                document.getElementById('nameInput').value = name;
-            }
-        }
-
-        loadName()
-
-
-
-        
-        function sendMessage() {
-            const messageText = document.getElementById('messageInput').value;
-            const name = document.getElementById('nameInput').value;
-            const message = {
-                id: "0000",
-                message: messageText,
-                type: "TextMessage",
-                from: name
-            };
-            socket.send(JSON.stringify(message));
-        }
-        
-        
-        
-        
-		function startHeartbeat() {
-		    setInterval(() => {
-		        if (socket.readyState === WebSocket.OPEN) {
-		            socket.send(JSON.stringify({ type: 'heartbeat' }));
-		        }
-		    }, 30000);
-		}
-        
-        startHeartbeat();
-        
-        
-    
-        
-		function requestNotificationPermission() {
-		    if (!("Notification" in window)) {
-		        alert("This browser does not support desktop notification");
-		    }
-		    else if (Notification.permission === "granted") {
-		        showNotification("Already subscribed!");
-		    }
-		    else if (Notification.permission !== "denied" || Notification.permission === "default") {
-		        Notification.requestPermission().then(function (permission) {
-		            if (permission === "granted") {
-		                showNotification("Subscribed!");
-		            }
-		        });
-		    }
-		}
-		
-		function showNotification(message) {
-		    var notification = new Notification(message);
-		}
-        
-        
-        
-        
-        const player = {
-            x: 500,
-            y: 500,
-            size: 30
-        };
-
-//         const svgNS = "http://www.w3.org/2000/svg";
-//         const ball = document.createElementNS(svgNS, "circle");
-//         ball.setAttribute("cx", player.x);
-//         ball.setAttribute("cy", player.y);
-//         ball.setAttribute("r", player.size);
-//         ball.setAttribute("fill", "green");
-//         document.getElementById("gameArea").appendChild(ball);
-
-		const localPlayer = document.getElementById('local-player');
-		const remotePlayer = document.getElementById('remote-player');
-
-        document.addEventListener("keydown", function(event) {
-            const step = 30;
-            if (event.key === "ArrowLeft") player.x -= step;
-            else if (event.key === "ArrowRight") player.x += step;
-            else if (event.key === "ArrowUp") player.y -= step;
-            else if (event.key === "ArrowDown") player.y += step;
-
-            localPlayer.setAttribute("cx", player.x / 10);
-            localPlayer.setAttribute("cy", player.y / 10);
-            localPlayer.setAttribute("r", player.size / 10);
-
-            const message = {
-                type: "GameUpdate",
-                player: player
-            };
-            socket.send(JSON.stringify(message));
-        });
-    </script>
+    init();
+</script>
 </body>
 </html>

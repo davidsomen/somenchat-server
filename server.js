@@ -1,118 +1,88 @@
-import express from 'express';
-import http from 'http';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import WebSocket, { WebSocketServer } from 'ws';
-import { generateText } from './openai.js';
-
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const express = require('express');
+const http = require('http');
+const WebSocket = require('ws');
+const jwt = require('jsonwebtoken');
+const AWS = require('aws-sdk');
 
 const app = express();
-const port = process.env.PORT || 8080;
-const clients = new Map();
-
-app.use(express.static(path.join(__dirname, 'public')));
-
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
+const wss = new WebSocket.Server({ server });
 
+const PORT = process.env.PORT || 8080;
 
-const broadcastMessage = (message, sender = null) => {
-  for (const [client, userInfo] of clients) {
-    if (client !== sender && client.readyState === WebSocket.OPEN) {
-      console.log(`Message sent: ${message}`);
-      client.send(message);
-    }
-  }
-};
-
-
-const broadcastAIResponse = async (text) => {
-  let responseText = await generateText(text);
-
-  const messageResponse = {
-    type: 'TextMessage',
-    message: responseText,
-    from: "AI",
-    id: "0000"
-  };
-  broadcastMessage(JSON.stringify(messageResponse));
-};
-
-
-const broadcastPeopleUpdate = () => {
-  const array = Array.from(clients).map(([ws, userInfo]) => ({
-    username: userInfo.username,
-    id: userInfo.id
-  }));
-
-  const message = {
-    type: 'PeopleUpdate',
-    people: array
-  };
-
-  broadcastMessage(JSON.stringify(message));
-};
-
-
-wss.on('connection', ws => {
-  console.log('Client connected');
-  clients.set(ws, { username: null, id: null });
-
-  broadcastPeopleUpdate();
-
-
-  ws.on('message', async message => {
-    console.log('Message received:', message.toString('utf8'));
-
-    try {
-      const json = JSON.parse(message);
-
-      switch (json.type) {
-        case "TextMessage":
-          broadcastMessage(message, ws);
-          
-          if (json.message.startsWith("AI ")) {
-            const text = json.message.slice(3);
-            broadcastAIResponse(text);
-          }
-          break;
-
-        case "UpdatePerson":
-          const client = clients.get(ws)
-          const person = json.person;
-          client.username = person.username;
-          client.id = person.id;
-          broadcastPeopleUpdate();
-          break;
-
-        default:
-          broadcastMessage(message, ws);
-          break;
-      }
-    } catch (error) {
-      console.error('Error parsing JSON:', error);
-    }
-  });
-
-
-  ws.on('close', () => {
-    console.log('Client closed');
-    clients.delete(ws);
-    broadcastPeopleUpdate();
-  });
-
-
-  ws.on('error', err => {
-    console.log('Client disconnected');
-    console.error('Error:', err);
-  });
+AWS.config.update({
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    region: process.env.AWS_REGION
 });
 
+const s3 = new AWS.S3();
 
-server.listen(port, () => {
-  console.log(`Server started on http://localhost:${port}`);
-  console.log(`WebSocket server started on ws://localhost:${port}`);
+app.get('/fetch/*', async (req, res) => {
+    const params = {
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: req.params[0]
+    };
+
+    s3.getObject(params, (err, data) => {
+        if (err) {
+            console.error(err);
+            res.status(500).send('Error fetching the object from S3');
+        } else {
+            res.set('Content-Type', data.ContentType);
+            res.send(data.Body);
+        }
+    });
+});
+
+app.use(express.static('public'));
+app.use(express.json());
+
+app.post('/login', (req, res) => {
+    const { username, password } = req.body;
+    if (username === 'user' && password === 'password') {
+        const token = jwt.sign({ username }, process.env.JWT_SECRET, { expiresIn: '1h' });
+        res.json({ token });
+    } else {
+        res.status(401).json({ message: 'Invalid credentials' });
+    }
+});
+
+let clients = [];
+
+wss.on('connection', (ws, req) => {
+    const token = req.url.split('token=')[1];
+    if (!token) {
+        ws.close(1008, 'Token missing');
+        return;
+    }
+
+    jwt.verify(token, JWT_SECRET, (err, decoded) => {
+        if (err) {
+            ws.close(1008, 'Invalid token');
+            return;
+        }
+
+        clients.push(ws);
+
+        ws.user = decoded.username;
+        ws.send(`Welcome ${ws.user}`);
+
+        ws.on('message', (message) => {
+            // console.log(`Received message from ${ws.user}: ${message}`);
+            clients.forEach((client) => {
+                if (client !== ws && client.readyState === WebSocket.OPEN) {
+                    client.send(message.toString());
+                }
+            });
+        });
+
+        ws.on('close', () => {
+            clients = clients.filter(client => client !== ws);
+        });
+    });
+});
+
+server.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
 });

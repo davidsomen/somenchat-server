@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>DJ Cube</title>
+    <style>
+        body { margin: 0; }
+        canvas { display: block; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+<script type="module">
+    // import * as THREE from 'three';
+
+    let scene, camera, renderer, cube, plane;
+    let speed = 0.02;
+    let rotationSpeedX = 0;
+    let rotationSpeedY = 0;
+    let rotationSpeedZ = 0;
+    let targetRotationSpeedX = 0;
+    let targetRotationSpeedY = 0;
+    const dampingFactor = 0.95;
+    let initialTouchX, initialTouchY;
+    let isTouching = false;
+    let currentRotation = new THREE.Quaternion();
+    let targetRotation = new THREE.Quaternion();
+
+    function init() {
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xd3d3d3);
+
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 5;
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        function createLetterTexture(letter) {
+            const canvas = document.createElement('canvas');
+            const size = 256;
+            canvas.width = size;
+            canvas.height = size;
+
+            const context = canvas.getContext('2d');
+            context.fillStyle = 'white';
+            context.fillRect(0, 0, size, size);
+            context.fillStyle = 'black';
+            context.font = '180px Georgia';
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.fillText(letter, size / 2, size / 2);
+
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
+        const materials = letters.map(letter => new THREE.MeshStandardMaterial({ map: createLetterTexture(letter) }));
+
+        const geometry = new THREE.BoxGeometry();
+        cube = new THREE.Mesh(geometry, materials);
+        cube.castShadow = true;
+        scene.add(cube);
+
+        const planeGeometry = new THREE.PlaneGeometry(10, 10);
+        const planeMaterial = new THREE.ShadowMaterial({ opacity: 0.5 });
+        plane = new THREE.Mesh(planeGeometry, planeMaterial);
+        plane.rotation.x = -Math.PI / 2;
+        plane.position.y = -1.5;
+        plane.receiveShadow = true;
+        scene.add(plane);
+        
+        const ambientLight = new THREE.AmbientLight(0x444444);
+        scene.add(ambientLight);
+        
+        const pointLight = new THREE.PointLight(0xffffff, 1, 100);
+        pointLight.position.set(5, 5, 5);
+        pointLight.castShadow = true;
+        pointLight.shadow.bias = -0.005;
+        pointLight.shadow.radius = 5;
+        // pointLight.shadow.camera.fov = 30;
+        scene.add(pointLight);
+
+        pointLight.shadow.mapSize.width = 512;
+        pointLight.shadow.mapSize.height = 512;
+        pointLight.shadow.camera.near = 0.5;
+        pointLight.shadow.camera.far = 500;
+
+        document.addEventListener('keydown', onDocumentKeyDown, false);
+        document.addEventListener('keyup', onDocumentKeyUp, false);
+        document.addEventListener('touchstart', onTouchStart, { passive: false });
+        document.addEventListener('touchmove', onTouchMove, { passive: false });
+        document.addEventListener('touchend', onTouchEnd, { passive: false });
+
+        animate();
+    }
+
+    function onDocumentKeyDown(event) {
+        let keyCode = event.which;
+        // Arrow keys control
+        if (keyCode === 37) {
+            // Left arrow key
+            targetRotationSpeedY = -speed;
+        } else if (keyCode === 39) {
+            // Right arrow key
+            targetRotationSpeedY = speed;
+        } else if (keyCode === 38) {
+            // Up arrow key
+            targetRotationSpeedX = -speed;
+        } else if (keyCode === 40) {
+            // Down arrow key
+            targetRotationSpeedX = speed;
+        }
+    }
+
+    function onDocumentKeyUp(event) {
+        let keyCode = event.which;
+        // Arrow keys control
+        if (keyCode === 37 || keyCode === 39) {
+            // Left or right arrow key
+            targetRotationSpeedY = 0;
+        } else if (keyCode === 38 || keyCode === 40) {
+            // Up or down arrow key
+            targetRotationSpeedX = 0;
+        }
+    }
+
+    function onTouchStart(event) {
+        event.preventDefault();
+        if (event.touches.length == 1) {
+            isTouching = true;
+            initialTouchX = event.touches[0].pageX;
+            initialTouchY = event.touches[0].pageY;
+        }
+    }
+
+    function onTouchMove(event) {
+        event.preventDefault();
+        if (isTouching && event.touches.length == 1) {
+            const touchX = event.touches[0].pageX;
+            const touchY = event.touches[0].pageY;
+        
+            const deltaX = (touchX - initialTouchX) * 0.01;
+            const deltaY = (touchY - initialTouchY) * 0.01;
+        
+            // const rotationX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), deltaX);
+            // const rotationY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), deltaY);
+        
+            // targetRotation.multiplyQuaternions(rotationX, targetRotation);
+            // targetRotation.multiplyQuaternions(targetRotation, rotationY);
+
+            cube.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), deltaX);
+            cube.rotateOnAxis(new THREE.Vector3(1, 0, 0), deltaY);
+
+            initialTouchX = touchX;
+            initialTouchY = touchY;
+        }
+    }
+
+    function onTouchEnd(event) {
+        event.preventDefault();
+        isTouching = false;
+        // targetRotationSpeedX = 0;
+        // targetRotationSpeedY = 0;
+    }
+
+
+    function animate() {
+        requestAnimationFrame(animate);
+        
+        // rotationSpeedX += (targetRotationSpeedX - rotationSpeedX) * (1 - dampingFactor);
+        // rotationSpeedY += (targetRotationSpeedY - rotationSpeedY) * (1 - dampingFactor);
+
+        // cube.rotation.x += rotationSpeedX;
+        // cube.rotation.y += rotationSpeedY;
+
+        // THREE.Quaternion.slerp(currentRotation, targetRotation, currentRotation, 0.1);
+        // cube.quaternion.copy(currentRotation);
+
+        renderer.render(scene, camera);
+    }
+
+    init();
+</script>
+</body>
+</html>

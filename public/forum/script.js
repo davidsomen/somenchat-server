@@ -26,7 +26,7 @@ function createPost(post) {
   const user = users[post.user];
   const message = highlightUsernames(post.message)
   const template = document.getElementById('post-template').content.cloneNode(true);
-  template.querySelector('img').src = `${baseUrl}/fetch/assets/${post.user}.jpg`;
+  template.querySelector('img').src = `${baseUrl}/fetch/assets/thumbnails/${post.user}.jpg`;
   template.querySelector('img').alt = user.username;
   template.querySelector('.username').textContent = user.username;
   template.querySelector('.content-box').innerHTML = message;

@@ -3,12 +3,43 @@ const http = require('http');
 const WebSocket = require('ws');
 const jwt = require('jsonwebtoken');
 const AWS = require('aws-sdk');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 const PORT = process.env.PORT || 8080;
+
+const tmpDirectory = path.join(__dirname, 'tmp');
+
+if (!fs.existsSync(tmpDirectory)) {
+    fs.mkdirSync(tmpDirectory);
+}
+
+async function fetchFileFromS3(fileName) {
+    const params = {
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: fileName
+    };
+
+    try {
+        const data = await s3.getObject(params).promise();
+        const filePath = path.join(tmpDirectory, fileName);
+        const dir = path.dirname(filePath);
+        
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+
+        fs.writeFileSync(filePath, data.Body);
+        return data.Body;
+    } catch (err) {
+        console.error('Error fetching file from S3:', err);
+        throw err;
+    }
+}
 
 AWS.config.update({
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -18,21 +49,42 @@ AWS.config.update({
 
 const s3 = new AWS.S3();
 
-app.get('/fetch/*', async (req, res) => {
+app.get('/count-items', (req, res) => {
     const params = {
         Bucket: process.env.AWS_BUCKET_NAME,
-        Key: req.params[0]
+        Prefix: 'data/posts'
     };
 
-    s3.getObject(params, (err, data) => {
+    s3.listObjectsV2(params, (err, data) => {
         if (err) {
-            console.error(err);
-            res.status(500).send('Error fetching the object from S3');
+            console.error('Error', err);
+            res.status(500).send('Error retrieving items');
         } else {
-            res.set('Content-Type', data.ContentType);
-            res.send(data.Body);
+            const itemCount = data.KeyCount;
+            res.json({ count: itemCount });
         }
     });
+});
+
+app.get('/fetch/*', async (req, res) => {
+    const fileName = req.params[0];
+    const filePath = path.join(tmpDirectory, fileName);
+
+    if (fs.existsSync(filePath)) {
+        res.sendFile(filePath, {
+            headers: {
+                'Cache-Control': 'public, max-age=86400'
+            }
+        });
+    } else {
+        try {
+            const fileData = await fetchFileFromS3(fileName);
+            res.set('Cache-Control', 'public, max-age=86400');
+            res.send(fileData);
+        } catch (err) {
+            res.status(404).send('File not found');
+        }
+    }
 });
 
 app.use(express.static('public'));

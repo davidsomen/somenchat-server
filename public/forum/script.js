@@ -6,8 +6,33 @@ async function fetchJsonData(fileName) {
   return response.json();
 }
 
+async function fetchItemCount() {
+  try {
+    const response = await fetch(`${baseUrl}/count-items`);
+    const data = await response.json();
+    populateSelectOptions(data.count);
+  } catch (error) {
+    console.error('Error fetching item count:', error);
+  }
+}
+
+function populateSelectOptions(count) {
+  const selectElement = document.getElementById('discussionSelect');
+  // selectElement.innerHTML = '';
+
+  for (let i = 0; i < count; i++) {
+    const option = document.createElement('option');
+    option.value = i;
+    option.text = `Discussion ${i + 1}`;
+    if (i === count - 1) {
+      option.selected = true;
+    }
+    selectElement.appendChild(option);
+  }
+}
+
 async function loadUsers() {
-    users = await fetchJsonData('users.json'); 
+  users = await fetchJsonData('users.json');
 }
 
 async function updatePosts() {
@@ -45,5 +70,6 @@ function renderPosts(posts) {
 
 document.addEventListener('DOMContentLoaded', async () => {
   await loadUsers();
+  await fetchItemCount();
   updatePosts();
 });

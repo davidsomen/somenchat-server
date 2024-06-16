@@ -54,8 +54,24 @@ function createPost(post) {
   template.querySelector('img').src = `${baseUrl}/fetch/assets/thumbnails/${post.user}.jpg`;
   template.querySelector('img').alt = user.username;
   template.querySelector('.username').textContent = user.username;
-  template.querySelector('.content-box').innerHTML = message;
+  template.querySelector('.message').innerHTML = message;
   template.querySelector('.forum-signature').textContent = user.signature;
+
+  if (post.reactions && post.reactions.length > 0) {
+    const reactionsList = template.querySelector('.reactions ul');
+    post.reactions.forEach(reaction => {
+      const user = users[reaction.user];
+      const listItem = document.createElement('li');
+      listItem.innerHTML = `
+      <img src="${baseUrl}/fetch/assets/thumbnails/${reaction.user}.jpg" alt="${reaction.name}">
+      <span class="emoji">${reaction.emoji}</span>
+      `;
+      reactionsList.appendChild(listItem);
+    });
+  } else {
+    template.querySelector('.reactions').remove();
+  }
+
   return template;
 }
 

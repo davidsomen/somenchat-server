@@ -89,3 +89,26 @@ document.addEventListener('DOMContentLoaded', async () => {
   await fetchItemCount();
   updatePosts();
 });
+
+const fileInput = document.getElementById('jsonFileInput');
+fileInput.addEventListener('change', (event) => {
+    const file = event.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const posts = JSON.parse(e.target.result);
+            renderPosts(posts)
+        };
+        reader.readAsText(file);
+    }
+});
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/service-worker.js')
+    .then(registration => {
+      console.log('Service Worker registered with scope:', registration.scope);
+    })
+    .catch(error => {
+      console.error('Service Worker registration failed:', error);
+    });
+}

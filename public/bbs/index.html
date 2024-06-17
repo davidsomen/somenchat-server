@@ -3,16 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Somen Bulletin</title>
+  <title>BBSomen</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="manifest" href="/manifest.json">
 </head>
 <body>
-  <h1>Somen Bulletin</h1>
+  <h1>Somen Bulletin Board</h1>
   <label for="discussionSelect">Select Discussion:</label>
   <select id="discussionSelect" onchange="updatePosts()">
   </select>
 
   <div id="forum-container"></div>
+
+  <input type="file" id="jsonFileInput" accept="application/json">
 
   <template id="post-template">
     <div class="forum-post">
